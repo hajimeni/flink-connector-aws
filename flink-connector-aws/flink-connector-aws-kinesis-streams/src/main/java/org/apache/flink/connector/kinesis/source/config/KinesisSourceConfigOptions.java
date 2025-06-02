@@ -79,6 +79,14 @@ public class KinesisSourceConfigOptions {
                     .withDescription(
                             "The maximum number of records to try to get each time we fetch records from a AWS Kinesis shard");
 
+    public static final ConfigOption<Duration> SHARD_GET_RECORDS_INTERVAL =
+            ConfigOptions.key("source.shard.get-records.interval")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(200))
+                    .withDescription(
+                            "The interval in milliseconds between fetches with records. " +
+                                    "This is only used by the POLLING reader type.");
+
     public static final ConfigOption<ReaderType> READER_TYPE =
             ConfigOptions.key("source.reader.type")
                     .enumType(ReaderType.class)
