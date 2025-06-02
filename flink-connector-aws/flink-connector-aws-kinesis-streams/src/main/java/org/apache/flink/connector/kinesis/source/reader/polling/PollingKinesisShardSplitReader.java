@@ -26,9 +26,14 @@ import org.apache.flink.connector.kinesis.source.proxy.StreamProxy;
 import org.apache.flink.connector.kinesis.source.reader.KinesisShardSplitReaderBase;
 import org.apache.flink.connector.kinesis.source.split.KinesisShardSplitState;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.kinesis.model.GetRecordsResponse;
 
+import java.util.Collections;
+import java.util.Date;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * An implementation of the KinesisShardSplitReader that periodically polls the Kinesis stream to
@@ -36,9 +41,14 @@ import java.util.Map;
  */
 @Internal
 public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase {
+    private static final Logger LOG = LoggerFactory.getLogger(PollingKinesisShardSplitReader.class);
+
     private final StreamProxy kinesis;
     private final Configuration configuration;
     private final int maxRecordsToGet;
+    private final long getRecordsIntervalMillis; // 追加: レコード取得間隔
+    private final Map<KinesisShardSplitState, PollingInterval> recordFetchScheduleTimes =
+            new WeakHashMap<>(); // 追加: スケジュール時間管理
 
     public PollingKinesisShardSplitReader(
             StreamProxy kinesisProxy,
@@ -48,6 +58,8 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
         this.kinesis = kinesisProxy;
         this.configuration = configuration;
         this.maxRecordsToGet = configuration.get(KinesisSourceConfigOptions.SHARD_GET_RECORDS_MAX);
+        this.getRecordsIntervalMillis =
+                configuration.get(KinesisSourceConfigOptions.SHARD_GET_RECORDS_INTERVAL).toMillis();
     }
 
     @Override
@@ -59,12 +71,68 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
                         splitState.getNextStartingPosition(),
                         this.maxRecordsToGet);
         boolean isCompleted = getRecordsResponse.nextShardIterator() == null;
+        RecordBatch recordBatch =
+                new RecordBatch(
+                        getRecordsResponse.records(),
+                        getRecordsResponse.millisBehindLatest(),
+                        isCompleted);
+
+        if (!recordBatch.getRecords().isEmpty()) {
+            scheduleNextRecordFetchTime(splitState, recordBatch.getMillisBehindLatest());
+        }
+
+        return recordBatch;
+    }
+
+    private boolean shouldSkipFetch(KinesisShardSplitState splitState) {
+        return recordFetchScheduleTimes.containsKey(splitState)
+                && recordFetchScheduleTimes.get(splitState).getIntervalMillis()
+                        > System.currentTimeMillis();
+    }
+
+    private RecordBatch buildSkipRecordBatch(KinesisShardSplitState splitState) {
+        PollingInterval pollingInterval = recordFetchScheduleTimes.get(splitState);
+        if (pollingInterval == null) {
+            return new RecordBatch(Collections.emptyList(), 0L, false);
+        }
         return new RecordBatch(
-                getRecordsResponse.records(), getRecordsResponse.millisBehindLatest(), isCompleted);
+                Collections.emptyList(), pollingInterval.getMillisBehindLatest(), false);
+    }
+
+    private void scheduleNextRecordFetchTime(
+            KinesisShardSplitState splitState, Long millisBehindLatest) {
+        long scheduledFetchTimeMillis = System.currentTimeMillis() + getRecordsIntervalMillis;
+        recordFetchScheduleTimes.put(
+                splitState, new PollingInterval(scheduledFetchTimeMillis, millisBehindLatest));
+        if (LOG.isDebugEnabled()) {
+            LOG.debug(
+                    "Records fetched from split {}, scheduling next fetch to {}, behind latest is {} ms",
+                    splitState.getSplitId(),
+                    new Date(scheduledFetchTimeMillis).toInstant(),
+                    millisBehindLatest);
+        }
     }
 
     @Override
     public void close() throws Exception {
         kinesis.close();
+    }
+
+    private static class PollingInterval {
+        private final Long intervalMillis;
+        private final Long millisBehindLatest;
+
+        public PollingInterval(Long intervalMillis, Long millisBehindLatest) {
+            this.intervalMillis = intervalMillis;
+            this.millisBehindLatest = millisBehindLatest;
+        }
+
+        public Long getIntervalMillis() {
+            return intervalMillis;
+        }
+
+        public Long getMillisBehindLatest() {
+            return millisBehindLatest;
+        }
     }
 }
