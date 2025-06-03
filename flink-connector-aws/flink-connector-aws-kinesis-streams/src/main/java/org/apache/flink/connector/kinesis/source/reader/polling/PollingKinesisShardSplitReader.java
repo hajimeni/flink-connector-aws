@@ -30,7 +30,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.kinesis.model.GetRecordsResponse;
 
-import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -89,8 +88,9 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     private boolean shouldSkipFetch(KinesisShardSplitState splitState) {
-        return recordFetchScheduleTimes.containsKey(splitState) &&
-                recordFetchScheduleTimes.get(splitState).getNextFetchTimeMillis() > System.currentTimeMillis();
+        return recordFetchScheduleTimes.containsKey(splitState)
+                && recordFetchScheduleTimes.get(splitState).getNextFetchTimeMillis()
+                        > System.currentTimeMillis();
     }
 
     private void scheduleNextRecordFetchTime(

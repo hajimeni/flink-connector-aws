@@ -418,15 +418,12 @@ class PollingKinesisShardSplitReaderTest {
         String testShardId = generateShardId(1);
         timingStreamProxy.addShards(testShardId);
 
-        List<Record> batch1Records = Arrays.asList(
-                getTestRecord("batch1-data-1"),
-                getTestRecord("batch1-data-2"));
-        List<Record> batch2Records = Arrays.asList(
-                getTestRecord("batch2-data-1"),
-                getTestRecord("batch2-data-2"));
-        List<Record> batch3Records = Arrays.asList(
-                getTestRecord("batch3-data-1"),
-                getTestRecord("batch3-data-2"));
+        List<Record> batch1Records =
+                Arrays.asList(getTestRecord("batch1-data-1"), getTestRecord("batch1-data-2"));
+        List<Record> batch2Records =
+                Arrays.asList(getTestRecord("batch2-data-1"), getTestRecord("batch2-data-2"));
+        List<Record> batch3Records =
+                Arrays.asList(getTestRecord("batch3-data-1"), getTestRecord("batch3-data-2"));
 
         timingStreamProxy.addRecords(STREAM_ARN, testShardId, batch1Records);
         timingStreamProxy.addRecords(STREAM_ARN, testShardId, batch2Records);
@@ -438,23 +435,24 @@ class PollingKinesisShardSplitReaderTest {
         List<List<Record>> allRecords = new ArrayList<>();
         List<Long> callTimestamps = new ArrayList<>();
 
-        await()
-                .pollInterval(1, TimeUnit.MILLISECONDS)
+        await().pollInterval(1, TimeUnit.MILLISECONDS)
                 .atMost(1, TimeUnit.DAYS)
-                .untilAsserted(() -> {
-                    RecordsWithSplitIds<Record> retrievedRecords = readerUnderTest.fetch();
-                    List<Record> records = readAllRecords(retrievedRecords);
-                    if (!records.isEmpty()) {
-                        allRecords.add(records);
-                        callTimestamps.add(timingStreamProxy.getLastCallTimestamp());
-                    }
-                    assertThat(timingStreamProxy.getCallCount()).isEqualTo(3);
-                });
+                .untilAsserted(
+                        () -> {
+                            RecordsWithSplitIds<Record> retrievedRecords = readerUnderTest.fetch();
+                            List<Record> records = readAllRecords(retrievedRecords);
+                            if (!records.isEmpty()) {
+                                allRecords.add(records);
+                                callTimestamps.add(timingStreamProxy.getLastCallTimestamp());
+                            }
+                            assertThat(timingStreamProxy.getCallCount()).isEqualTo(3);
+                        });
 
         assertThat(allRecords).hasSize(3);
-        List<Long> intervals = IntStream.range(0, callTimestamps.size() - 1)
-                .mapToObj(i -> callTimestamps.get(i + 1) - callTimestamps.get(i))
-                .collect(Collectors.toList());
+        List<Long> intervals =
+                IntStream.range(0, callTimestamps.size() - 1)
+                        .mapToObj(i -> callTimestamps.get(i + 1) - callTimestamps.get(i))
+                        .collect(Collectors.toList());
         for (long interval : intervals) {
             assertThat(interval).isGreaterThanOrEqualTo(intervalMillis);
             assertThat(interval).isLessThan(intervalMillis + 100);
@@ -473,10 +471,10 @@ class PollingKinesisShardSplitReaderTest {
         String shard2Id = generateShardId(2);
 
         // 各シャード用のメトリックを登録
-        KinesisShardMetrics shard1Metrics = new KinesisShardMetrics(
-                getTestSplit(shard1Id), metricListener.getMetricGroup());
-        KinesisShardMetrics shard2Metrics = new KinesisShardMetrics(
-                getTestSplit(shard2Id), metricListener.getMetricGroup());
+        KinesisShardMetrics shard1Metrics =
+                new KinesisShardMetrics(getTestSplit(shard1Id), metricListener.getMetricGroup());
+        KinesisShardMetrics shard2Metrics =
+                new KinesisShardMetrics(getTestSplit(shard2Id), metricListener.getMetricGroup());
 
         Map<String, KinesisShardMetrics> multiShardMetricGroupMap = new ConcurrentHashMap<>();
         multiShardMetricGroupMap.put(shard1Id, shard1Metrics);
@@ -504,35 +502,35 @@ class PollingKinesisShardSplitReaderTest {
         }
 
         readerUnderTest.handleSplitsChanges(
-                new SplitsAddition<>(Arrays.asList(
-                        getTestSplit(shard1Id),
-                        getTestSplit(shard2Id))));
+                new SplitsAddition<>(
+                        Arrays.asList(getTestSplit(shard1Id), getTestSplit(shard2Id))));
 
         List<Long> shard1Timestamps = new ArrayList<>();
         List<Long> shard2Timestamps = new ArrayList<>();
 
-        await()
-                .pollInterval(10, TimeUnit.MILLISECONDS)
+        await().pollInterval(10, TimeUnit.MILLISECONDS)
                 .atMost(5, TimeUnit.SECONDS)
-                .untilAsserted(() -> {
-                    RecordsWithSplitIds<Record> retrievedRecords = readerUnderTest.fetch();
-                    List<Record> records = readAllRecords(retrievedRecords);
+                .untilAsserted(
+                        () -> {
+                            RecordsWithSplitIds<Record> retrievedRecords = readerUnderTest.fetch();
+                            List<Record> records = readAllRecords(retrievedRecords);
 
-                    Map<String, List<Long>> shardTimestamps =
-                            multiShardTimingProxy.getShardCallTimestamps();
+                            Map<String, List<Long>> shardTimestamps =
+                                    multiShardTimingProxy.getShardCallTimestamps();
 
-                    if (shardTimestamps.get(shard1Id) != null) {
-                        shard1Timestamps.clear();
-                        shard1Timestamps.addAll(shardTimestamps.get(shard1Id));
-                    }
+                            if (shardTimestamps.get(shard1Id) != null) {
+                                shard1Timestamps.clear();
+                                shard1Timestamps.addAll(shardTimestamps.get(shard1Id));
+                            }
 
-                    if (shardTimestamps.get(shard2Id) != null) {
-                        shard2Timestamps.clear();
-                        shard2Timestamps.addAll(shardTimestamps.get(shard2Id));
-                    }
+                            if (shardTimestamps.get(shard2Id) != null) {
+                                shard2Timestamps.clear();
+                                shard2Timestamps.addAll(shardTimestamps.get(shard2Id));
+                            }
 
-                    assertThat(shard1Timestamps.size() >= 3 && shard2Timestamps.size() >= 3).isTrue();
-                });
+                            assertThat(shard1Timestamps.size() >= 3 && shard2Timestamps.size() >= 3)
+                                    .isTrue();
+                        });
 
         for (int i = 0; i < shard1Timestamps.size() - 1; i++) {
             long interval = shard1Timestamps.get(i + 1) - shard1Timestamps.get(i);
@@ -556,7 +554,8 @@ class PollingKinesisShardSplitReaderTest {
         public GetRecordsResponse getRecords(
                 String streamArn, String shardId, StartingPosition shardIterator, int maxRecords) {
             // シャードごとの呼び出し時間を記録
-            shardCallTimestamps.computeIfAbsent(shardId, k -> new ArrayList<>())
+            shardCallTimestamps
+                    .computeIfAbsent(shardId, k -> new ArrayList<>())
                     .add(System.currentTimeMillis());
             return super.getRecords(streamArn, shardId, shardIterator, maxRecords);
         }
