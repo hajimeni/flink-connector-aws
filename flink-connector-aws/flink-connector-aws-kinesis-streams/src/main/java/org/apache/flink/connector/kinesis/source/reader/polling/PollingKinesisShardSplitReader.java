@@ -61,7 +61,7 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     @Override
     protected RecordBatch fetchRecords(KinesisShardSplitState splitState) {
         if (shouldSkipFetch(splitState)) {
-            return buildSkipRecordBatch(splitState);
+            return null;
         }
 
         GetRecordsResponse getRecordsResponse =
@@ -82,8 +82,8 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     private boolean shouldSkipFetch(KinesisShardSplitState splitState) {
-        return recordFetchScheduleTimes.containsKey(splitState)
-                && recordFetchScheduleTimes.get(splitState).getIntervalMillis() > System.currentTimeMillis();
+        return recordFetchScheduleTimes.containsKey(splitState) &&
+                recordFetchScheduleTimes.get(splitState).getNextFetchTimeMillis() > System.currentTimeMillis();
     }
 
     private RecordBatch buildSkipRecordBatch(KinesisShardSplitState splitState) {
@@ -115,16 +115,16 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     private static class PollingInterval {
-        private final Long intervalMillis;
+        private final Long nextFetchTimeMillis;
         private final Long millisBehindLatest;
 
         public PollingInterval(Long intervalMillis, Long millisBehindLatest) {
-            this.intervalMillis = intervalMillis;
+            this.nextFetchTimeMillis = intervalMillis;
             this.millisBehindLatest = millisBehindLatest;
         }
 
-        public Long getIntervalMillis() {
-            return intervalMillis;
+        public Long getNextFetchTimeMillis() {
+            return nextFetchTimeMillis;
         }
 
         public Long getMillisBehindLatest() {
