@@ -64,6 +64,10 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
 
     @Override
     protected RecordBatch fetchRecords(KinesisShardSplitState splitState) {
+        if (shouldSkipFetch(splitState)) {
+            return null;
+        }
+
         GetRecordsResponse getRecordsResponse =
                 kinesis.getRecords(
                         splitState.getStreamArn(),
@@ -85,18 +89,8 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     private boolean shouldSkipFetch(KinesisShardSplitState splitState) {
-        return recordFetchScheduleTimes.containsKey(splitState)
-                && recordFetchScheduleTimes.get(splitState).getIntervalMillis()
-                        > System.currentTimeMillis();
-    }
-
-    private RecordBatch buildSkipRecordBatch(KinesisShardSplitState splitState) {
-        PollingInterval pollingInterval = recordFetchScheduleTimes.get(splitState);
-        if (pollingInterval == null) {
-            return new RecordBatch(Collections.emptyList(), 0L, false);
-        }
-        return new RecordBatch(
-                Collections.emptyList(), pollingInterval.getMillisBehindLatest(), false);
+        return recordFetchScheduleTimes.containsKey(splitState) &&
+                recordFetchScheduleTimes.get(splitState).getNextFetchTimeMillis() > System.currentTimeMillis();
     }
 
     private void scheduleNextRecordFetchTime(
@@ -119,16 +113,16 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     private static class PollingInterval {
-        private final Long intervalMillis;
+        private final Long nextFetchTimeMillis;
         private final Long millisBehindLatest;
 
         public PollingInterval(Long intervalMillis, Long millisBehindLatest) {
-            this.intervalMillis = intervalMillis;
+            this.nextFetchTimeMillis = intervalMillis;
             this.millisBehindLatest = millisBehindLatest;
         }
 
-        public Long getIntervalMillis() {
-            return intervalMillis;
+        public Long getNextFetchTimeMillis() {
+            return nextFetchTimeMillis;
         }
 
         public Long getMillisBehindLatest() {
