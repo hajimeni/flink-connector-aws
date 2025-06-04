@@ -77,6 +77,7 @@ class PollingKinesisShardSplitReaderTest {
 
         sourceConfig = new Configuration();
         sourceConfig.set(SHARD_GET_RECORDS_MAX, 50);
+        sourceConfig.set(SHARD_GET_RECORDS_INTERVAL, Duration.ZERO);
 
         shardMetricGroupMap.put(
                 TEST_SHARD_ID,

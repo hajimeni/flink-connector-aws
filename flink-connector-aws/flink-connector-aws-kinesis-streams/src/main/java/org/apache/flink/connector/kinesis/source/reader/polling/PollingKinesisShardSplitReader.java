@@ -30,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.kinesis.model.GetRecordsResponse;
 
+import java.io.IOException;
 import java.util.Date;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -62,8 +63,8 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
     }
 
     @Override
-    protected RecordBatch fetchRecords(KinesisShardSplitState splitState) {
-        if (shouldSkipFetch(splitState)) {
+    protected RecordBatch fetchRecords(KinesisShardSplitState splitState) throws IOException {
+        if (skipUntileScheduledFetchTime(splitState)) {
             return null;
         }
 
@@ -85,10 +86,22 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
         return recordBatch;
     }
 
-    private boolean shouldSkipFetch(KinesisShardSplitState splitState) {
-        return recordFetchScheduleTimes.containsKey(splitState)
+    private boolean skipUntileScheduledFetchTime(KinesisShardSplitState splitState)
+            throws IOException {
+        if (getRecordsIntervalMillis > 0
+                && recordFetchScheduleTimes.containsKey(splitState)
                 && recordFetchScheduleTimes.get(splitState).getNextFetchTimeMillis()
-                        > System.currentTimeMillis();
+                        > System.currentTimeMillis()) {
+            try {
+                // Small sleep to prevent busy polling
+                Thread.sleep(1);
+                return true;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Sleep was interrupted while skipping no assigned split", e);
+            }
+        }
+        return false;
     }
 
     private void scheduleNextRecordFetchTime(
