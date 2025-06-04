@@ -80,9 +80,7 @@ public class PollingKinesisShardSplitReader extends KinesisShardSplitReaderBase 
                         getRecordsResponse.millisBehindLatest(),
                         isCompleted);
 
-        if (!recordBatch.getRecords().isEmpty()) {
-            scheduleNextRecordFetchTime(splitState, recordBatch.getMillisBehindLatest());
-        }
+        scheduleNextRecordFetchTime(splitState, recordBatch.getMillisBehindLatest());
 
         return recordBatch;
     }
